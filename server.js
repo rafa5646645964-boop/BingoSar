@@ -89,7 +89,7 @@ io.on("connection", (socket) => {
         // El frontend manda seed/maxOmega/angleStart para sincronizar exacto.
         const now = Date.now();
         rouletteState.isOpen = true;
-        rouletteState.phase = "spinning";
+        rouletteState.phase = payload.phase || "spinning";
         rouletteState.seed = payload.seed ?? rouletteState.seed ?? Math.floor(Math.random() * 1e9);
         rouletteState.angleRad = typeof payload.angleRad === "number" ? payload.angleRad : rouletteState.angleRad;
         rouletteState.omegaRadPerSec = typeof payload.omegaRadPerSec === "number" ? payload.omegaRadPerSec : 0;
@@ -101,6 +101,9 @@ io.on("connection", (socket) => {
             angleRad: rouletteState.angleRad,
             omegaRadPerSec: rouletteState.omegaRadPerSec,
             maxOmegaRadPerSec: rouletteState.maxOmegaRadPerSec,
+            clapperAngle: typeof payload.clapperAngle === "number" ? payload.clapperAngle : undefined,
+            isSyncTick: payload.isSyncTick === true,
+            phase: rouletteState.phase,
         });
         io.emit("roulette:state", { ...rouletteState, numbers: ROULETTE_NUMBERS, serverNow: Date.now() });
     });
@@ -108,10 +111,22 @@ io.on("connection", (socket) => {
     socket.on("roulette:stop", (payload = {}) => {
         const now = Date.now();
         // No forzamos número ganador; solo ordenamos frenar igual en todos.
-        rouletteState.phase = "braking";
+        rouletteState.phase = payload.phase || "braking";
+        if (typeof payload.angleRad === "number") rouletteState.angleRad = payload.angleRad;
+        if (typeof payload.omegaRadPerSec === "number") rouletteState.omegaRadPerSec = payload.omegaRadPerSec;
         rouletteState.lastActionAt = now;
         io.emit("roulette:stop", { serverNow: now, ...payload });
         io.emit("roulette:state", { ...rouletteState, numbers: ROULETTE_NUMBERS, serverNow: Date.now() });
+    });
+
+    // Espejo en tiempo real: admin -> viewers
+    socket.on("roulette:mirror", (payload = {}) => {
+        if (typeof payload.angleRad === "number") rouletteState.angleRad = payload.angleRad;
+        if (typeof payload.omegaRadPerSec === "number") rouletteState.omegaRadPerSec = payload.omegaRadPerSec;
+        if (typeof payload.phase === "string") rouletteState.phase = payload.phase;
+        if (typeof payload.isOpen === "boolean") rouletteState.isOpen = payload.isOpen;
+        rouletteState.lastActionAt = Date.now();
+        socket.broadcast.emit("roulette:mirror", { serverNow: Date.now(), ...payload });
     });
 });
 
