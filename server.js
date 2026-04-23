@@ -15,6 +15,20 @@ let bolas = [];
 let ganadores = []; 
 const CLAVE_MAESTRA = "Viaco_4312**";
 
+// ==========================
+// Ruleta Cyberpunk (estado)
+// ==========================
+const ROULETTE_NUMBERS = Array.from({ length: 50 }, (_, i) => (i + 1) * 2); // 2..100 pares
+const rouletteState = {
+    isOpen: false,
+    phase: "idle", // idle | spinning | braking | stopped
+    angleRad: 0,
+    omegaRadPerSec: 0,
+    maxOmegaRadPerSec: 0,
+    seed: null,
+    lastActionAt: 0,
+};
+
 const verificarClave = (req, res, next) => {
     if (req.query.key === CLAVE_MAESTRA) next();
     else res.status(401).json({ error: "No autorizado" });
@@ -23,6 +37,11 @@ const verificarClave = (req, res, next) => {
 io.on("connection", (socket) => {
     socket.emit("historial", bolas);
     socket.emit("notificar_admin", ganadores);
+    socket.emit("roulette:state", {
+        ...rouletteState,
+        numbers: ROULETTE_NUMBERS,
+        serverNow: Date.now(),
+    });
 
     // Cantar bingo (Máximo 3)
     socket.on("cantar_bingo", (datos) => {
@@ -38,6 +57,61 @@ io.on("connection", (socket) => {
     socket.on("limpiar_ganadores", () => {
         ganadores = [];
         io.emit("notificar_admin", ganadores);
+    });
+
+    // ==========================
+    // Ruleta Cyberpunk (eventos)
+    // ==========================
+    socket.on("roulette:open", (payload = {}) => {
+        rouletteState.isOpen = true;
+        rouletteState.phase = rouletteState.phase === "idle" ? "stopped" : rouletteState.phase;
+        rouletteState.lastActionAt = Date.now();
+        io.emit("roulette:open", {
+            serverNow: Date.now(),
+            numbers: ROULETTE_NUMBERS,
+            ...payload,
+        });
+        io.emit("roulette:state", { ...rouletteState, numbers: ROULETTE_NUMBERS, serverNow: Date.now() });
+    });
+
+    socket.on("roulette:close", () => {
+        rouletteState.isOpen = false;
+        rouletteState.phase = "idle";
+        rouletteState.omegaRadPerSec = 0;
+        rouletteState.maxOmegaRadPerSec = 0;
+        rouletteState.seed = null;
+        rouletteState.lastActionAt = Date.now();
+        io.emit("roulette:close", { serverNow: Date.now() });
+        io.emit("roulette:state", { ...rouletteState, numbers: ROULETTE_NUMBERS, serverNow: Date.now() });
+    });
+
+    socket.on("roulette:start", (payload = {}) => {
+        // El frontend manda seed/maxOmega/angleStart para sincronizar exacto.
+        const now = Date.now();
+        rouletteState.isOpen = true;
+        rouletteState.phase = "spinning";
+        rouletteState.seed = payload.seed ?? rouletteState.seed ?? Math.floor(Math.random() * 1e9);
+        rouletteState.angleRad = typeof payload.angleRad === "number" ? payload.angleRad : rouletteState.angleRad;
+        rouletteState.omegaRadPerSec = typeof payload.omegaRadPerSec === "number" ? payload.omegaRadPerSec : 0;
+        rouletteState.maxOmegaRadPerSec = typeof payload.maxOmegaRadPerSec === "number" ? payload.maxOmegaRadPerSec : (rouletteState.maxOmegaRadPerSec || 14);
+        rouletteState.lastActionAt = now;
+        io.emit("roulette:start", {
+            serverNow: now,
+            seed: rouletteState.seed,
+            angleRad: rouletteState.angleRad,
+            omegaRadPerSec: rouletteState.omegaRadPerSec,
+            maxOmegaRadPerSec: rouletteState.maxOmegaRadPerSec,
+        });
+        io.emit("roulette:state", { ...rouletteState, numbers: ROULETTE_NUMBERS, serverNow: Date.now() });
+    });
+
+    socket.on("roulette:stop", (payload = {}) => {
+        const now = Date.now();
+        // No forzamos número ganador; solo ordenamos frenar igual en todos.
+        rouletteState.phase = "braking";
+        rouletteState.lastActionAt = now;
+        io.emit("roulette:stop", { serverNow: now, ...payload });
+        io.emit("roulette:state", { ...rouletteState, numbers: ROULETTE_NUMBERS, serverNow: Date.now() });
     });
 });
 
