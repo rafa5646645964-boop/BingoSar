@@ -18,10 +18,10 @@ const CLAVE_MAESTRA = "Viaco_4312**";
 // ==========================
 // Ruleta Cyberpunk (estado)
 // ==========================
-const ROULETTE_NUMBERS = Array.from({ length: 50 }, (_, i) => (i + 1) * 2); // 2..100 pares
+const ROULETTE_NUMBERS = Array.from({ length: 50 }, (_, i) => (i + 1) * 2);
 const rouletteState = {
     isOpen: false,
-    phase: "idle", // idle | spinning | braking | stopped
+    phase: "idle",
     angleRad: 0,
     omegaRadPerSec: 0,
     maxOmegaRadPerSec: 0,
@@ -43,10 +43,8 @@ io.on("connection", (socket) => {
         serverNow: Date.now(),
     });
 
-    // Cantar bingo (Máximo 3)
     socket.on("cantar_bingo", (datos) => {
         const yaExiste = ganadores.find(g => g.carton === datos.carton);
-        // Permite exactamente hasta 3 ganadores que no tengan el mismo número de cartón
         if (ganadores.length < 3 && !yaExiste) {
             ganadores.push(datos);
             ganadores.sort((a, b) => a.timestamp - b.timestamp);
@@ -86,7 +84,6 @@ io.on("connection", (socket) => {
     });
 
     socket.on("roulette:start", (payload = {}) => {
-        // El frontend manda seed/maxOmega/angleStart para sincronizar exacto.
         const now = Date.now();
         rouletteState.isOpen = true;
         rouletteState.phase = payload.phase || "spinning";
@@ -110,7 +107,6 @@ io.on("connection", (socket) => {
 
     socket.on("roulette:stop", (payload = {}) => {
         const now = Date.now();
-        // No forzamos número ganador; solo ordenamos frenar igual en todos.
         rouletteState.phase = payload.phase || "braking";
         if (typeof payload.angleRad === "number") rouletteState.angleRad = payload.angleRad;
         if (typeof payload.omegaRadPerSec === "number") rouletteState.omegaRadPerSec = payload.omegaRadPerSec;
@@ -119,14 +115,19 @@ io.on("connection", (socket) => {
         io.emit("roulette:state", { ...rouletteState, numbers: ROULETTE_NUMBERS, serverNow: Date.now() });
     });
 
-    // Espejo en tiempo real: admin -> viewers
+    // ⚡ CORREGIDO: Mirror ahora propaga correctamente el estado "stopped"
     socket.on("roulette:mirror", (payload = {}) => {
         if (typeof payload.angleRad === "number") rouletteState.angleRad = payload.angleRad;
         if (typeof payload.omegaRadPerSec === "number") rouletteState.omegaRadPerSec = payload.omegaRadPerSec;
         if (typeof payload.phase === "string") rouletteState.phase = payload.phase;
         if (typeof payload.isOpen === "boolean") rouletteState.isOpen = payload.isOpen;
         rouletteState.lastActionAt = Date.now();
+        
+        // Emitir a TODOS menos al admin que envió el mirror
         socket.broadcast.emit("roulette:mirror", { serverNow: Date.now(), ...payload });
+        
+        // También actualizar el estado global para nuevos connections
+        io.emit("roulette:state", { ...rouletteState, numbers: ROULETTE_NUMBERS, serverNow: Date.now() });
     });
 });
 
