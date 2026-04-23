@@ -106,9 +106,9 @@ io.on("connection", (socket) => {
         let deltaMod = desiredMod - currentMod;
         if (deltaMod < 0) deltaMod += 360;
 
-        const extraTurns = 3 + Math.floor(Math.random() * 3); // 3..5 (más rápido al detener)
+        const extraTurns = 3 + Math.floor(Math.random() * 3); // 3..5
         const finalAngleDeg = currentAngleDeg + extraTurns * 360 + deltaMod;
-        const durationMs = 2600 + Math.floor(Math.random() * 600); // 2.6s..3.2s
+        const durationMs = 2400 + Math.floor(Math.random() * 500); // 2.4s..2.9s (más respuesta)
         const stopAt = Date.now();
 
         rouletteState = {
@@ -125,7 +125,8 @@ io.on("connection", (socket) => {
             durationMs,
             startAngleDeg: currentAngleDeg,
             finalAngleDeg,
-            finalNumber: targetNumber
+            finalNumber: targetNumber,
+            extraTurns
         });
     });
 });
