@@ -13,13 +13,6 @@ const io = new Server(server, {
 
 let bolas = [];
 let ganadores = []; 
-let rouletteState = {
-    open: false,
-    spinning: false,
-    lastAngleDeg: 0,
-    lastNumber: null,
-    lastUpdateAt: Date.now()
-};
 const CLAVE_MAESTRA = "Viaco_4312**";
 
 const verificarClave = (req, res, next) => {
@@ -30,7 +23,6 @@ const verificarClave = (req, res, next) => {
 io.on("connection", (socket) => {
     socket.emit("historial", bolas);
     socket.emit("notificar_admin", ganadores);
-    socket.emit("roulette:state", rouletteState);
 
     // Cantar bingo (Máximo 3)
     socket.on("cantar_bingo", (datos) => {
@@ -46,88 +38,6 @@ io.on("connection", (socket) => {
     socket.on("limpiar_ganadores", () => {
         ganadores = [];
         io.emit("notificar_admin", ganadores);
-    });
-
-    // ==========================
-    // 🎡 Ruleta 1-100 (control admin)
-    // ==========================
-    const isAdminPayload = (p) => p && p.key === CLAVE_MAESTRA;
-
-    socket.on("roulette:open", (p = {}) => {
-        if (!isAdminPayload(p)) return;
-        rouletteState = {
-            ...rouletteState,
-            open: true,
-            spinning: false,
-            lastAngleDeg: Number.isFinite(p.angleDeg) ? p.angleDeg : rouletteState.lastAngleDeg,
-            lastNumber: Number.isFinite(p.number) ? p.number : rouletteState.lastNumber,
-            lastUpdateAt: Date.now()
-        };
-        io.emit("roulette:state", rouletteState);
-        io.emit("roulette:open", { angleDeg: rouletteState.lastAngleDeg, number: rouletteState.lastNumber });
-    });
-
-    socket.on("roulette:close", (p = {}) => {
-        if (!isAdminPayload(p)) return;
-        rouletteState = { ...rouletteState, open: false, spinning: false, lastUpdateAt: Date.now() };
-        io.emit("roulette:state", rouletteState);
-        io.emit("roulette:close");
-    });
-
-    socket.on("roulette:start", (p = {}) => {
-        if (!isAdminPayload(p)) return;
-        if (!rouletteState.open) return;
-        rouletteState = {
-            ...rouletteState,
-            spinning: true,
-            lastAngleDeg: Number.isFinite(p.angleDeg) ? p.angleDeg : rouletteState.lastAngleDeg,
-            lastUpdateAt: Date.now()
-        };
-        io.emit("roulette:state", rouletteState);
-        io.emit("roulette:start", {
-            startAt: Date.now(),
-            startAngleDeg: rouletteState.lastAngleDeg
-        });
-    });
-
-    socket.on("roulette:stop", (p = {}) => {
-        if (!isAdminPayload(p)) return;
-        if (!rouletteState.open) return;
-        if (!rouletteState.spinning) return;
-
-        const currentAngleDeg = Number.isFinite(p.angleDeg) ? p.angleDeg : rouletteState.lastAngleDeg;
-        const seg = 360 / 100;
-        const targetNumber = Math.floor(Math.random() * 100) + 1;
-        const targetCenterDeg = -((targetNumber - 0.5) * seg);
-
-        const mod = (x) => ((x % 360) + 360) % 360;
-        const currentMod = mod(currentAngleDeg);
-        const desiredMod = mod(targetCenterDeg);
-        let deltaMod = desiredMod - currentMod;
-        if (deltaMod < 0) deltaMod += 360;
-
-        const extraTurns = 3 + Math.floor(Math.random() * 3); // 3..5
-        const finalAngleDeg = currentAngleDeg + extraTurns * 360 + deltaMod;
-        const durationMs = 2400 + Math.floor(Math.random() * 500); // 2.4s..2.9s (más respuesta)
-        const stopAt = Date.now();
-
-        rouletteState = {
-            ...rouletteState,
-            spinning: false,
-            lastAngleDeg: finalAngleDeg,
-            lastNumber: targetNumber,
-            lastUpdateAt: Date.now()
-        };
-
-        io.emit("roulette:state", rouletteState);
-        io.emit("roulette:stop", {
-            stopAt,
-            durationMs,
-            startAngleDeg: currentAngleDeg,
-            finalAngleDeg,
-            finalNumber: targetNumber,
-            extraTurns
-        });
     });
 });
 
