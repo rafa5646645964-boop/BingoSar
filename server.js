@@ -13,14 +13,12 @@ const io = new Server(server, {
 
 let bolas = [];
 let ganadores = []; 
+let reservados = []; // ⚡ NUEVO: Array de cartones reservados
 const CLAVE_MAESTRA = "Viaco_4312**";
 
-// ==========================
-// Ruleta Cyberpunk (estado)
-// ==========================
 const rouletteState = {
     isOpen: false,
-    phase: "idle", // idle | spinning | braking | stopped
+    phase: "idle",
     angleRad: 0,
     omegaRadPerSec: 0,
     maxOmegaRadPerSec: 0,
@@ -36,16 +34,12 @@ const verificarClave = (req, res, next) => {
 io.on("connection", (socket) => {
     socket.emit("historial", bolas);
     socket.emit("notificar_admin", ganadores);
-    socket.emit("roulette:state", {
-        ...rouletteState,
-        serverNow: Date.now(),
-    });
+    socket.emit("roulette:state", { ...rouletteState, serverNow: Date.now() });
+    // ⚡ Emitir estado de reservas
+    socket.emit("reservas:estado", reservados);
 
-    // ⚡ CORREGIDO: Validar por carton Y tipo, no solo por carton
     socket.on("cantar_bingo", (datos) => {
-        const yaExiste = ganadores.find(g => 
-            g.carton === datos.carton && g.tipo === datos.tipo
-        );
+        const yaExiste = ganadores.find(g => g.carton === datos.carton && g.tipo === datos.tipo);
         if (ganadores.length < 3 && !yaExiste) {
             ganadores.push(datos);
             ganadores.sort((a, b) => a.timestamp - b.timestamp);
@@ -53,30 +47,44 @@ io.on("connection", (socket) => {
         }
     });
 
-    // Limpiar todos los ganadores
     socket.on("limpiar_ganadores", () => {
         ganadores = [];
         io.emit("notificar_admin", ganadores);
     });
 
-    // ⚡ NUEVO: Limpiar ganadores por tipo (tablas o regalos)
     socket.on("limpiar_ganadores_tipo", (datos) => {
-        const tipo = datos.tipo;
-        ganadores = ganadores.filter(g => g.tipo !== tipo);
+        ganadores = ganadores.filter(g => g.tipo !== datos.tipo);
         io.emit("notificar_admin", ganadores);
     });
 
-    // ==========================
-    // Ruleta Cyberpunk (eventos)
-    // ==========================
+    // ⚡ NUEVO: Reservar cartones
+    socket.on("reservar_cartones", (cartones) => {
+        cartones.forEach(id => {
+            if (!reservados.includes(id)) {
+                reservados.push(id);
+            }
+        });
+        io.emit("reservas:update", reservados);
+    });
+
+    // ⚡ NUEVO: Liberar cartones reservados
+    socket.on("liberar_cartones", (cartones) => {
+        reservados = reservados.filter(id => !cartones.includes(id));
+        io.emit("reservas:update", reservados);
+    });
+
+    // ⚡ NUEVO: Limpiar todas las reservas
+    socket.on("limpiar_reservas", () => {
+        reservados = [];
+        io.emit("reservas:update", reservados);
+    });
+
+    // Ruleta
     socket.on("roulette:open", (payload = {}) => {
         rouletteState.isOpen = true;
         rouletteState.phase = rouletteState.phase === "idle" ? "stopped" : rouletteState.phase;
         rouletteState.lastActionAt = Date.now();
-        io.emit("roulette:open", {
-            serverNow: Date.now(),
-            ...payload,
-        });
+        io.emit("roulette:open", { serverNow: Date.now(), ...payload });
         io.emit("roulette:state", { ...rouletteState, serverNow: Date.now() });
     });
 
@@ -101,11 +109,8 @@ io.on("connection", (socket) => {
         rouletteState.maxOmegaRadPerSec = typeof payload.maxOmegaRadPerSec === "number" ? payload.maxOmegaRadPerSec : (rouletteState.maxOmegaRadPerSec || 14);
         rouletteState.lastActionAt = now;
         io.emit("roulette:start", {
-            serverNow: now,
-            seed: rouletteState.seed,
-            angleRad: rouletteState.angleRad,
-            omegaRadPerSec: rouletteState.omegaRadPerSec,
-            maxOmegaRadPerSec: rouletteState.maxOmegaRadPerSec,
+            serverNow: now, seed: rouletteState.seed, angleRad: rouletteState.angleRad,
+            omegaRadPerSec: rouletteState.omegaRadPerSec, maxOmegaRadPerSec: rouletteState.maxOmegaRadPerSec,
             clapperAngle: typeof payload.clapperAngle === "number" ? payload.clapperAngle : undefined,
             phase: "spinning",
         });
@@ -118,11 +123,7 @@ io.on("connection", (socket) => {
         if (typeof payload.angleRad === "number") rouletteState.angleRad = payload.angleRad;
         if (typeof payload.omegaRadPerSec === "number") rouletteState.omegaRadPerSec = payload.omegaRadPerSec;
         rouletteState.lastActionAt = now;
-        io.emit("roulette:stop", { 
-            serverNow: now, 
-            ...payload,
-            phase: "braking"
-        });
+        io.emit("roulette:stop", { serverNow: now, ...payload, phase: "braking" });
         io.emit("roulette:state", { ...rouletteState, serverNow: Date.now() });
     });
 
@@ -132,20 +133,14 @@ io.on("connection", (socket) => {
         if (typeof payload.phase === "string" && payload.phase) rouletteState.phase = payload.phase;
         if (typeof payload.isOpen === "boolean") rouletteState.isOpen = payload.isOpen;
         rouletteState.lastActionAt = Date.now();
-        
-        socket.broadcast.emit("roulette:mirror", { 
-            serverNow: Date.now(), 
-            ...payload 
-        });
+        socket.broadcast.emit("roulette:mirror", { serverNow: Date.now(), ...payload });
     });
 });
 
 app.get("/api/bola", verificarClave, (req, res) => {
     if (bolas.length >= 75) return res.json({ error: "Ya salieron todas las bolas", total: bolas.length });
-    
     let bola;
     const manual = req.query.manual;
-
     if (manual) {
         if (bolas.includes(manual.toUpperCase())) return res.json({ error: "Esa bola ya salió", total: bolas.length });
         bola = manual.toUpperCase();
@@ -161,7 +156,6 @@ app.get("/api/bola", verificarClave, (req, res) => {
             bola = letra + numero;
         } while (bolas.includes(bola));
     }
-
     bolas.push(bola);
     io.emit("nueva_bola", bola);
     res.json({ numero: bola, total: bolas.length });
