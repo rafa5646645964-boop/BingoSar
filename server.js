@@ -28,9 +28,6 @@ const rouletteState = {
     lastActionAt: 0,
 };
 
-// ⚡ CORREGIDO: Ya no forzamos numbers, el frontend usa sus propios números
-// El servidor solo gestiona el estado, no los números de la ruleta
-
 const verificarClave = (req, res, next) => {
     if (req.query.key === CLAVE_MAESTRA) next();
     else res.status(401).json({ error: "No autorizado" });
@@ -39,14 +36,16 @@ const verificarClave = (req, res, next) => {
 io.on("connection", (socket) => {
     socket.emit("historial", bolas);
     socket.emit("notificar_admin", ganadores);
-    // ⚡ CORREGIDO: No enviamos numbers, el frontend ya los tiene
     socket.emit("roulette:state", {
         ...rouletteState,
         serverNow: Date.now(),
     });
 
+    // ⚡ CORREGIDO: Validar por carton Y tipo, no solo por carton
     socket.on("cantar_bingo", (datos) => {
-        const yaExiste = ganadores.find(g => g.carton === datos.carton);
+        const yaExiste = ganadores.find(g => 
+            g.carton === datos.carton && g.tipo === datos.tipo
+        );
         if (ganadores.length < 3 && !yaExiste) {
             ganadores.push(datos);
             ganadores.sort((a, b) => a.timestamp - b.timestamp);
@@ -66,7 +65,6 @@ io.on("connection", (socket) => {
         rouletteState.isOpen = true;
         rouletteState.phase = rouletteState.phase === "idle" ? "stopped" : rouletteState.phase;
         rouletteState.lastActionAt = Date.now();
-        // ⚡ CORREGIDO: No enviamos numbers innecesarios
         io.emit("roulette:open", {
             serverNow: Date.now(),
             ...payload,
@@ -108,7 +106,6 @@ io.on("connection", (socket) => {
 
     socket.on("roulette:stop", (payload = {}) => {
         const now = Date.now();
-        // ⚡ CORREGIDO: Siempre ponemos braking cuando se presiona detener
         rouletteState.phase = "braking";
         if (typeof payload.angleRad === "number") rouletteState.angleRad = payload.angleRad;
         if (typeof payload.omegaRadPerSec === "number") rouletteState.omegaRadPerSec = payload.omegaRadPerSec;
@@ -116,21 +113,18 @@ io.on("connection", (socket) => {
         io.emit("roulette:stop", { 
             serverNow: now, 
             ...payload,
-            phase: "braking" // Aseguramos que la fase sea braking
+            phase: "braking"
         });
         io.emit("roulette:state", { ...rouletteState, serverNow: Date.now() });
     });
 
-    // ⚡ CORREGIDO: Mirror ahora propaga todo correctamente, incluyendo phase
     socket.on("roulette:mirror", (payload = {}) => {
-        // Solo actualizar el estado si el payload tiene valores válidos
         if (typeof payload.angleRad === "number") rouletteState.angleRad = payload.angleRad;
         if (typeof payload.omegaRadPerSec === "number") rouletteState.omegaRadPerSec = payload.omegaRadPerSec;
         if (typeof payload.phase === "string" && payload.phase) rouletteState.phase = payload.phase;
         if (typeof payload.isOpen === "boolean") rouletteState.isOpen = payload.isOpen;
         rouletteState.lastActionAt = Date.now();
         
-        // Emitir a TODOS los clientes EXCEPTO el que envió
         socket.broadcast.emit("roulette:mirror", { 
             serverNow: Date.now(), 
             ...payload 
