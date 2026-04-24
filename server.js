@@ -53,8 +53,16 @@ io.on("connection", (socket) => {
         }
     });
 
+    // Limpiar todos los ganadores
     socket.on("limpiar_ganadores", () => {
         ganadores = [];
+        io.emit("notificar_admin", ganadores);
+    });
+
+    // ⚡ NUEVO: Limpiar ganadores por tipo (tablas o regalos)
+    socket.on("limpiar_ganadores_tipo", (datos) => {
+        const tipo = datos.tipo;
+        ganadores = ganadores.filter(g => g.tipo !== tipo);
         io.emit("notificar_admin", ganadores);
     });
 
