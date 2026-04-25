@@ -13,7 +13,7 @@ const io = new Server(server, {
 
 let bolas = [];
 let ganadores = []; 
-let reservados = []; // ⚡ NUEVO: Array de cartones reservados
+let reservados = [];
 const CLAVE_MAESTRA = "Viaco_4312**";
 
 const rouletteState = {
@@ -35,9 +35,9 @@ io.on("connection", (socket) => {
     socket.emit("historial", bolas);
     socket.emit("notificar_admin", ganadores);
     socket.emit("roulette:state", { ...rouletteState, serverNow: Date.now() });
-    // ⚡ Emitir estado de reservas
     socket.emit("reservas:estado", reservados);
 
+    // Bingo
     socket.on("cantar_bingo", (datos) => {
         const yaExiste = ganadores.find(g => g.carton === datos.carton && g.tipo === datos.tipo);
         if (ganadores.length < 3 && !yaExiste) {
@@ -57,26 +57,29 @@ io.on("connection", (socket) => {
         io.emit("notificar_admin", ganadores);
     });
 
-    // ⚡ NUEVO: Reservar cartones
+    // Reservas
     socket.on("reservar_cartones", (cartones) => {
-        cartones.forEach(id => {
-            if (!reservados.includes(id)) {
-                reservados.push(id);
-            }
-        });
+        cartones.forEach(id => { if (!reservados.includes(id)) reservados.push(id); });
         io.emit("reservas:update", reservados);
     });
 
-    // ⚡ NUEVO: Liberar cartones reservados
     socket.on("liberar_cartones", (cartones) => {
         reservados = reservados.filter(id => !cartones.includes(id));
         io.emit("reservas:update", reservados);
     });
 
-    // ⚡ NUEVO: Limpiar todas las reservas
     socket.on("limpiar_reservas", () => {
         reservados = [];
         io.emit("reservas:update", reservados);
+    });
+
+    // ⚡ NUEVO: Recibir comprobante de pago
+    socket.on("comprobante_pago", (datos) => {
+        io.emit("admin_comprobante", {
+            cartones: datos.cartones,
+            imagen: datos.imagen,
+            timestamp: datos.timestamp
+        });
     });
 
     // Ruleta
