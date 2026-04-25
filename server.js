@@ -8,6 +8,9 @@ const path = require("path");
 const app = express();
 app.use(cors({ origin: "*" }));
 
+// Servir la carpeta Frontend como estática
+app.use(express.static(path.join(__dirname, "Frontend")));
+
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: { origin: "*", methods: ["GET", "POST"] }
@@ -80,7 +83,8 @@ io.on("connection", (socket) => {
         io.emit("admin_comprobante", {
             cartones: datos.cartones,
             imagen: datos.imagen,
-            timestamp: datos.timestamp
+            timestamp: datos.timestamp,
+            nombre: datos.nombre || "SIN NOMBRE"
         });
     });
 
@@ -177,43 +181,29 @@ app.get("/api/reset", verificarClave, (req, res) => {
     res.json({ ok: true, total: 0 });
 });
 
+// ✅ NUEVO ENDPOINT CORREGIDO: Lee desde la carpeta Frontend
 app.get("/api/autodetector-data", async (req, res) => {
-    const rutasBase = [
-        path.resolve(__dirname, "..", "Frontend"),
-        path.resolve(process.cwd(), "Frontend"),
-        process.cwd(),
-    ];
-
-    const leerJson = async (nombreArchivo) => {
-        let ultimoError = "";
-        for (const base of rutasBase) {
-            const fullPath = path.join(base, nombreArchivo);
-            try {
-                const raw = await fs.promises.readFile(fullPath, "utf8");
-                const data = JSON.parse(raw);
-                return { data, path: fullPath };
-            } catch (err) {
-                ultimoError = `${fullPath} -> ${err.message}`;
-            }
-        }
-        throw new Error(ultimoError || `No se pudo leer ${nombreArchivo}`);
+    const frontendDir = path.join(__dirname, "Frontend");
+    const archivos = {
+        tablas: path.join(frontendDir, "cartones_completo.json"),
+        regalos: path.join(frontendDir, "regalos_completo.json")
     };
-
     try {
-        const [tablas, regalos] = await Promise.all([
-            leerJson("cartones_completo.json"),
-            leerJson("regalos_completo.json"),
+        const [tablasRaw, regalosRaw] = await Promise.all([
+            fs.promises.readFile(archivos.tablas, "utf8"),
+            fs.promises.readFile(archivos.regalos, "utf8")
         ]);
+        const tablas = JSON.parse(tablasRaw);
+        const regalos = JSON.parse(regalosRaw);
         res.json({
             ok: true,
-            tablas: tablas.data,
-            regalos: regalos.data,
-            source: { tablas: tablas.path, regalos: regalos.path },
+            tablas: Array.isArray(tablas) ? tablas : [],
+            regalos: Array.isArray(regalos) ? regalos : []
         });
     } catch (err) {
-        res.status(404).json({
+        res.status(500).json({
             ok: false,
-            error: `No se pudieron leer archivos de auto detector (${err.message})`,
+            error: `No se pudieron leer los archivos JSON (${err.message})`
         });
     }
 });
