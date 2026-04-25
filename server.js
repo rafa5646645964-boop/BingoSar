@@ -84,7 +84,6 @@ io.on("connection", (socket) => {
 
     // Respuesta del admin sobre el pago
     socket.on("pago_respuesta", (datos) => {
-        // Emitir a TODOS (incluyendo otras pestañas del admin) para mantener sincronización
         io.emit("pago_respuesta", datos);
     });
 
