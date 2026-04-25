@@ -2,14 +2,9 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
-const fs = require("fs");
-const path = require("path");
 
 const app = express();
 app.use(cors({ origin: "*" }));
-
-// Servir la carpeta Frontend como estática
-app.use(express.static(path.join(__dirname, "Frontend")));
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -83,8 +78,7 @@ io.on("connection", (socket) => {
         io.emit("admin_comprobante", {
             cartones: datos.cartones,
             imagen: datos.imagen,
-            timestamp: datos.timestamp,
-            nombre: datos.nombre || "SIN NOMBRE"
+            timestamp: datos.timestamp
         });
     });
 
@@ -179,52 +173,6 @@ app.get("/api/reset", verificarClave, (req, res) => {
     bolas = [];
     io.emit("reset");
     res.json({ ok: true, total: 0 });
-});
-
-// ✅ NUEVO ENDPOINT CORREGIDO: Lee desde la carpeta Frontend
-app.get("/api/autodetector-data", async (req, res) => {
-    const frontendDir = path.join(__dirname, "Frontend");
-    const archivos = {
-        tablas: path.join(frontendDir, "cartones_completo.json"),
-        regalos: path.join(frontendDir, "regalos_completo.json")
-    };
-    try {
-        const [tablasRaw, regalosRaw] = await Promise.all([
-            fs.promises.readFile(archivos.tablas, "utf8"),
-            fs.promises.readFile(archivos.regalos, "utf8")
-        ]);
-        const tablas = JSON.parse(tablasRaw);
-        const regalos = JSON.parse(regalosRaw);
-        res.json({
-            ok: true,
-            tablas: Array.isArray(tablas) ? tablas : [],
-            regalos: Array.isArray(regalos) ? regalos : []
-        });
-    } catch (err) {
-        res.status(500).json({
-            ok: false,
-            error: `No se pudieron leer los archivos JSON (${err.message})`
-        });
-    }
-});
-
-app.get("/api/version", (req, res) => {
-    res.json({
-        ok: true,
-        service: "bingo-backend",
-        now: new Date().toISOString(),
-        env: {
-            node: process.version,
-            render_service_id: process.env.RENDER_SERVICE_ID || null,
-            render_git_commit: process.env.RENDER_GIT_COMMIT || null,
-        },
-        routes: [
-            "/api/bola",
-            "/api/reset",
-            "/api/autodetector-data",
-            "/api/version",
-        ],
-    });
 });
 
 server.listen(3000, () => {
