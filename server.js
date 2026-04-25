@@ -218,6 +218,25 @@ app.get("/api/autodetector-data", async (req, res) => {
     }
 });
 
+app.get("/api/version", (req, res) => {
+    res.json({
+        ok: true,
+        service: "bingo-backend",
+        now: new Date().toISOString(),
+        env: {
+            node: process.version,
+            render_service_id: process.env.RENDER_SERVICE_ID || null,
+            render_git_commit: process.env.RENDER_GIT_COMMIT || null,
+        },
+        routes: [
+            "/api/bola",
+            "/api/reset",
+            "/api/autodetector-data",
+            "/api/version",
+        ],
+    });
+});
+
 server.listen(3000, () => {
     console.log("Servidor Bingo 777 Activo en puerto 3000");
 });
