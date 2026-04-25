@@ -73,13 +73,18 @@ io.on("connection", (socket) => {
         io.emit("reservas:update", reservados);
     });
 
-    // ⚡ NUEVO: Recibir comprobante de pago
+    // Comprobante de pago
     socket.on("comprobante_pago", (datos) => {
         io.emit("admin_comprobante", {
             cartones: datos.cartones,
             imagen: datos.imagen,
             timestamp: datos.timestamp
         });
+    });
+
+    // ⚡ NUEVO: Respuesta del admin sobre el pago
+    socket.on("pago_respuesta", (datos) => {
+        socket.broadcast.emit("pago_respuesta", datos);
     });
 
     // Ruleta
