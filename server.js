@@ -2,6 +2,8 @@ const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
+const fs = require("fs");
+const path = require("path");
 
 const app = express();
 app.use(cors({ origin: "*" }));
@@ -173,6 +175,47 @@ app.get("/api/reset", verificarClave, (req, res) => {
     bolas = [];
     io.emit("reset");
     res.json({ ok: true, total: 0 });
+});
+
+app.get("/api/autodetector-data", async (req, res) => {
+    const rutasBase = [
+        path.resolve(__dirname, "..", "Frontend"),
+        path.resolve(process.cwd(), "Frontend"),
+        process.cwd(),
+    ];
+
+    const leerJson = async (nombreArchivo) => {
+        let ultimoError = "";
+        for (const base of rutasBase) {
+            const fullPath = path.join(base, nombreArchivo);
+            try {
+                const raw = await fs.promises.readFile(fullPath, "utf8");
+                const data = JSON.parse(raw);
+                return { data, path: fullPath };
+            } catch (err) {
+                ultimoError = `${fullPath} -> ${err.message}`;
+            }
+        }
+        throw new Error(ultimoError || `No se pudo leer ${nombreArchivo}`);
+    };
+
+    try {
+        const [tablas, regalos] = await Promise.all([
+            leerJson("cartones_completo.json"),
+            leerJson("regalos_completo.json"),
+        ]);
+        res.json({
+            ok: true,
+            tablas: tablas.data,
+            regalos: regalos.data,
+            source: { tablas: tablas.path, regalos: regalos.path },
+        });
+    } catch (err) {
+        res.status(404).json({
+            ok: false,
+            error: `No se pudieron leer archivos de auto detector (${err.message})`,
+        });
+    }
 });
 
 server.listen(3000, () => {
