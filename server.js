@@ -78,6 +78,7 @@ io.on("connection", (socket) => {
         io.emit("admin_comprobante", {
             cartones: datos.cartones,
             imagen: datos.imagen,
+            nombre: datos.nombre || '',
             timestamp: datos.timestamp
         });
     });
